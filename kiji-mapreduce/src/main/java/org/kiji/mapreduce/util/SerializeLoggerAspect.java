@@ -36,9 +36,13 @@ import org.aspectj.lang.annotation.Pointcut;
 import org.kiji.schema.util.LogTimerAspect;
 import org.kiji.schema.util.LoggingInfo;
 
+/**
+ * This aspect is invoked after the cleanup function in a mapreduce job. It
+ * accesses logging information gathered by the LogTimerAspect in kiji schema and
+ * serializes it to a local file.
+ */
 @Aspect
 public class SerializeLoggerAspect {
-  private String mPid;
   private LogTimerAspect mLogTimerAspect;
 
   /**
@@ -53,7 +57,9 @@ public class SerializeLoggerAspect {
     }
   }
 
-
+  /**
+   * Pointcut attached to cleanup code in Map/Reduce tasks.
+   */
   @Pointcut("execution(* org.kiji.mapreduce.KijiMapper.cleanup(..)) ||"
       + "execution(* org.kiji.mapreduce.KijiReducer.cleanup(..))")
   protected void mrCleanupPoint(){
@@ -63,35 +69,32 @@ public class SerializeLoggerAspect {
    * Advice for running after any functions that match PointCut "writeResultsLocal".
    *
    * @param thisJoinPoint The joinpoint that matched the pointcut.
+   * @throws IOException If the writes to hdfs fail.
    */
   @AfterReturning("mrCleanupPoint() && !cflowbelow(mrCleanupPoint())")
-      //+ "execution(* org.kiji.mapreduce.KijiReducer.cleanup(..))")
   public void afterMRCleanup(final JoinPoint thisJoinPoint) throws IOException {
-    System.out.println("fghi: ");
     TaskInputOutputContext context = (TaskInputOutputContext)thisJoinPoint.getArgs()[0];
-    System.out.println(thisJoinPoint.getSignature().toLongString());
-    System.out.println(context.getJobName());
-    System.out.println(context.getJobID());
-    System.out.println(context.getTaskAttemptID() + "\n");
 
-    Path path = new Path(context.getWorkingDirectory() + context.getTaskAttemptID().toString());
+    Path parentPath = new Path(context.getWorkingDirectory(), "kijistats");
     FileSystem fs = FileSystem.get(context.getConfiguration());
+    fs.mkdirs(parentPath);
+    Path path = new Path(parentPath, context.getTaskAttemptID().toString());
+    OutputStreamWriter out = new OutputStreamWriter(fs.create(path, true), "UTF-8");
     try {
-      OutputStreamWriter out = new OutputStreamWriter(fs.create(path, true), "UTF-8");
-      try {
-        out.write(mPid + "\n");
-        HashMap<String, LoggingInfo> signatureTimeMap =
-            mLogTimerAspect.getSignatureTimeMap();
-        for (Map.Entry<String, LoggingInfo> entrySet: signatureTimeMap.entrySet()) {
-          out.write("In tool: " + thisJoinPoint.getSignature().toLongString()
-              + ", Function: " + entrySet.getKey() + ", " + entrySet.getValue().toString() + ", "
-              + entrySet.getValue().perCallTime().toString() + "\n");
-        }
-      } finally {
-        out.close();
+      out.write("Job Name, Job ID, Task Attempt, Function Signature, Aggregate Time (nanoseconds), "
+          + "Number of Invocations, Time per call (nanoseconds)\n");
+      HashMap<String, LoggingInfo> signatureTimeMap =
+          mLogTimerAspect.getSignatureTimeMap();
+      for (Map.Entry<String, LoggingInfo> entrySet: signatureTimeMap.entrySet()) {
+        out.write(context.getJobName() + ", "
+            + context.getJobID() + ", "
+            + context.getTaskAttemptID() + ", "
+            + entrySet.getKey() + ", "
+            + entrySet.getValue().toString() + ", "
+            + entrySet.getValue().perCallTime().toString() + "\n");
       }
     } finally {
-      fs.close();
+      out.close();
     }
   }
 }

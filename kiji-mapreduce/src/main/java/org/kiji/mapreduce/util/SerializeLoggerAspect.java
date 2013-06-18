@@ -36,6 +36,7 @@ import org.aspectj.lang.annotation.Pointcut;
 
 import org.kiji.annotations.ApiAudience;
 import org.kiji.annotations.ApiStability;
+import org.kiji.mapreduce.framework.KijiProfilingCounterGroups;
 import org.kiji.schema.util.LogTimerAspect;
 import org.kiji.schema.util.LoggingInfo;
 
@@ -79,7 +80,7 @@ public class SerializeLoggerAspect {
    * @param context The {@link TaskInputOutputContext} for this job.
    * @throws IOException If the writes to hdfs fail.
    */
-  private void serializeToFile(TaskInputOutputContext context) throws IOException {
+  private void serializeAndUpdateCounters(TaskInputOutputContext context) throws IOException {
     Path parentPath = new Path(context.getWorkingDirectory(), STATS_DIR);
     FileSystem fs = FileSystem.get(context.getConfiguration());
     fs.mkdirs(parentPath);
@@ -103,6 +104,11 @@ public class SerializeLoggerAspect {
             + entrySet.getKey() + ", "
             + entrySet.getValue().toString() + ", "
             + nf.format(entrySet.getValue().perCallTime()) + "\n");
+
+        context.getCounter(KijiProfilingCounterGroups.PROFILING_AGGREGATE_TIME.name(),
+            entrySet.getKey()).increment(entrySet.getValue().getAggregateTime());
+        context.getCounter(KijiProfilingCounterGroups.PROFILING_FUNCTION_INVOCATIONS.name(),
+            entrySet.getKey()).increment(entrySet.getValue().getNumInvoked());
       }
     } finally {
       out.close();
@@ -118,7 +124,7 @@ public class SerializeLoggerAspect {
   public void afterMRCleanup(final JoinPoint thisJoinPoint) {
     TaskInputOutputContext context = (TaskInputOutputContext)thisJoinPoint.getArgs()[0];
     try {
-      serializeToFile(context);
+      serializeAndUpdateCounters(context);
     } catch (IOException ioe) {
       ioe.printStackTrace();
     }

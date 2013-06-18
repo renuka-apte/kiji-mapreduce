@@ -1,5 +1,5 @@
 /**
- * (c) Copyright 2012 WibiData, Inc.
+ * (c) Copyright 2013 WibiData, Inc.
  *
  * See the NOTICE file distributed with this work for additional
  * information regarding copyright ownership.
@@ -21,8 +21,8 @@ package org.kiji.mapreduce.util;
 
 import java.io.IOException;
 import java.io.OutputStreamWriter;
-import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -33,6 +33,8 @@ import org.aspectj.lang.annotation.AfterReturning;
 import org.aspectj.lang.annotation.Aspect;
 import org.aspectj.lang.annotation.Pointcut;
 
+import org.kiji.annotations.ApiAudience;
+import org.kiji.annotations.ApiStability;
 import org.kiji.schema.util.LogTimerAspect;
 import org.kiji.schema.util.LoggingInfo;
 
@@ -41,9 +43,12 @@ import org.kiji.schema.util.LoggingInfo;
  * accesses logging information gathered by the LogTimerAspect in kiji schema and
  * serializes it to a local file.
  */
+@ApiAudience.Framework
+@ApiStability.Experimental
 @Aspect
 public class SerializeLoggerAspect {
   private LogTimerAspect mLogTimerAspect;
+  private static final String STATS_DIR = "kijistats";
 
   /**
    * Default constructor. Initializes the pid of the JVM running the tool
@@ -66,16 +71,15 @@ public class SerializeLoggerAspect {
   }
 
   /**
-   * Advice for running after any functions that match PointCut "writeResultsLocal".
+   * Logic to serialize collected profiling content to a file on HDFS. The files are stored
+   * in the current working directory for this context, in a folder called kijistats. The per
+   * task file is named by the task attempt id.
    *
-   * @param thisJoinPoint The joinpoint that matched the pointcut.
+   * @param context The {@link TaskInputOutputContext} for this job.
    * @throws IOException If the writes to hdfs fail.
    */
-  @AfterReturning("mrCleanupPoint() && !cflowbelow(mrCleanupPoint())")
-  public void afterMRCleanup(final JoinPoint thisJoinPoint) throws IOException {
-    TaskInputOutputContext context = (TaskInputOutputContext)thisJoinPoint.getArgs()[0];
-
-    Path parentPath = new Path(context.getWorkingDirectory(), "kijistats");
+  private void serializeToFile(TaskInputOutputContext context) throws IOException {
+    Path parentPath = new Path(context.getWorkingDirectory(), STATS_DIR);
     FileSystem fs = FileSystem.get(context.getConfiguration());
     fs.mkdirs(parentPath);
     Path path = new Path(parentPath, context.getTaskAttemptID().toString());
@@ -83,7 +87,7 @@ public class SerializeLoggerAspect {
     try {
       out.write("Job Name, Job ID, Task Attempt, Function Signature, Aggregate Time (nanoseconds), "
           + "Number of Invocations, Time per call (nanoseconds)\n");
-      HashMap<String, LoggingInfo> signatureTimeMap =
+      ConcurrentHashMap<String, LoggingInfo> signatureTimeMap =
           mLogTimerAspect.getSignatureTimeMap();
       for (Map.Entry<String, LoggingInfo> entrySet: signatureTimeMap.entrySet()) {
         out.write(context.getJobName() + ", "
@@ -95,6 +99,21 @@ public class SerializeLoggerAspect {
       }
     } finally {
       out.close();
+    }
+  }
+
+  /**
+   * Advice for running after any functions that match PointCut "writeResultsLocal".
+   *
+   * @param thisJoinPoint The joinpoint that matched the pointcut.
+   */
+  @AfterReturning("mrCleanupPoint() && !cflowbelow(mrCleanupPoint())")
+  public void afterMRCleanup(final JoinPoint thisJoinPoint) {
+    TaskInputOutputContext context = (TaskInputOutputContext)thisJoinPoint.getArgs()[0];
+    try {
+      serializeToFile(context);
+    } catch (IOException ioe) {
+      ioe.printStackTrace();
     }
   }
 }

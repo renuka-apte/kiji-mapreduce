@@ -21,6 +21,7 @@ package org.kiji.mapreduce.util;
 
 import java.io.IOException;
 import java.io.OutputStreamWriter;
+import java.text.NumberFormat;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -90,12 +91,18 @@ public class SerializeLoggerAspect {
       ConcurrentHashMap<String, LoggingInfo> signatureTimeMap =
           mLogTimerAspect.getSignatureTimeMap();
       for (Map.Entry<String, LoggingInfo> entrySet: signatureTimeMap.entrySet()) {
+        // ensure that files do not end up with x.yzE7 format for floats
+        NumberFormat nf = NumberFormat.getInstance();
+        nf.setGroupingUsed(false);
+        nf.setMinimumFractionDigits(1);
+        nf.setMaximumFractionDigits(3);
+
         out.write(context.getJobName() + ", "
             + context.getJobID() + ", "
             + context.getTaskAttemptID() + ", "
             + entrySet.getKey() + ", "
             + entrySet.getValue().toString() + ", "
-            + entrySet.getValue().perCallTime().toString() + "\n");
+            + nf.format(entrySet.getValue().perCallTime()) + "\n");
       }
     } finally {
       out.close();

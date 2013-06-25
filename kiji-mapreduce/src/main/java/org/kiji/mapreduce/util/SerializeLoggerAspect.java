@@ -33,6 +33,8 @@ import org.aspectj.lang.JoinPoint;
 import org.aspectj.lang.annotation.AfterReturning;
 import org.aspectj.lang.annotation.Aspect;
 import org.aspectj.lang.annotation.Pointcut;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import org.kiji.annotations.ApiAudience;
 import org.kiji.annotations.ApiStability;
@@ -49,6 +51,11 @@ import org.kiji.schema.util.LoggingInfo;
 @Aspect
 public class SerializeLoggerAspect {
   private LogTimerAspect mLogTimerAspect;
+  private static final Logger LOG = LoggerFactory.getLogger(SerializeLoggerAspect.class);
+  /**
+   * Output directory (under map reduce job's current directory) for profiling results.
+   * Example: /users/username/kijistats
+   */
   private static final String STATS_DIR = "kijistats";
 
   /**
@@ -68,12 +75,12 @@ public class SerializeLoggerAspect {
    */
   @Pointcut("execution(* org.kiji.mapreduce.KijiMapper.cleanup(..)) ||"
       + "execution(* org.kiji.mapreduce.KijiReducer.cleanup(..))")
-  protected void mrCleanupPoint(){
+  protected void mrCleanupPoint() {
   }
 
   /**
    * Logic to serialize collected profiling content to a file on HDFS. The files are stored
-   * in the current working directory for this context, in a folder called kijistats. The per
+   * in the current working directory for this context, in a folder specified by STATS_DIR. The per
    * task file is named by the task attempt id.
    *
    * @param context The {@link TaskInputOutputContext} for this job.
@@ -120,7 +127,7 @@ public class SerializeLoggerAspect {
     try {
       serializeToFile(context);
     } catch (IOException ioe) {
-      ioe.printStackTrace();
+      LOG.error("Failure writing profiling results", ioe);
     }
   }
 }

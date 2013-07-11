@@ -36,8 +36,8 @@
 
   <properties>
     <kiji-avro.version>1.1.2-cdh4</kiji-avro.version>
-    <aspectj-maven-plugin-version>1.4</aspectj-maven-plugin-version>
-    <org.aspectj-version>1.7.2</org.aspectj-version>
+    <aspectj-maven-plugin.version>1.4</aspectj-maven-plugin.version>
+    <aspectjrt.version>1.7.2</aspectjrt.version>
   </properties>
 
   <build>
@@ -131,7 +131,7 @@
       <plugin>
           <groupId>org.codehaus.mojo</groupId>
           <artifactId>aspectj-maven-plugin</artifactId>
-          <version>${aspectj-maven-plugin-version}</version>
+          <version>${aspectj-maven-plugin.version}</version>
           <executions>
               <execution>
                   <goals>
@@ -246,11 +246,6 @@
       <artifactId>commons-codec</artifactId>
       <version>1.4</version>
     </dependency>
-    <dependency>
-        <groupId>org.aspectj</groupId>
-        <artifactId>aspectjrt</artifactId>
-        <version>${org.aspectj-version}</version>
-    </dependency>
 
     <!-- All platform bridge implementations that should be bundled with the redistributable. -->
     <dependency>
@@ -342,6 +337,97 @@
           <optional>true</optional>
         </dependency>
       </dependencies>
+    </profile>
+
+    <profile>
+      <!--
+      This profile compiles kiji-schema with profiling support compiled in.
+      -->
+      <id>profiling</id>
+      <activation>
+        <activeByDefault>false</activeByDefault>
+      </activation>
+      <dependencies>
+        <dependency>
+          <groupId>org.aspectj</groupId>
+          <artifactId>aspectjrt</artifactId>
+          <version>${aspectjrt.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.kiji.schema</groupId>
+            <artifactId>kiji-schema</artifactId>
+            <!-- After the first profiling release of kiji schema, the SNAPSHOT version should be
+            removed -->
+            <version>1.1.2-SNAPSHOT</version>
+            <classifier>profiling</classifier>
+            <scope>provided</scope>
+        </dependency>
+      </dependencies>
+      <build>
+        <plugins>
+        <!-- Add the profiling sources to the build -->
+          <plugin>
+            <groupId>org.codehaus.mojo</groupId>
+            <artifactId>build-helper-maven-plugin</artifactId>
+            <version>1.7</version>
+            <executions>
+              <execution>
+                <id>add-source</id>
+                <phase>generate-sources</phase>
+                <goals>
+                  <goal>add-source</goal>
+                </goals>
+                <configuration>
+                  <sources>
+                    <source>src/profiling/java/</source>
+                  </sources>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+          <!-- Enable AspectJ's bytecode rewriting -->
+          <plugin>
+            <groupId>org.codehaus.mojo</groupId>
+            <artifactId>aspectj-maven-plugin</artifactId>
+            <version>${aspectj-maven-plugin.version}</version>
+            <executions>
+              <execution>
+                <goals>
+                  <goal>compile</goal>
+                  <goal>test-compile</goal>
+                </goals>
+                <configuration>
+                  <source>${maven.compiler.source}</source>
+                  <target>${maven.compiler.target}</target>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+          <!-- Use the appropriate classifier -->
+          <plugin>
+            <artifactId>maven-jar-plugin</artifactId>
+            <executions>
+              <execution>
+                <phase>package</phase>
+                <goals>
+                  <goal>jar</goal>
+                </goals>
+                <configuration>
+                  <classifier>profiling</classifier>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+          <!-- AspectJ doesn't currently play nicely with findbugs. -->
+          <plugin>
+            <groupId>org.codehaus.mojo</groupId>
+            <artifactId>findbugs-maven-plugin</artifactId>
+            <configuration>
+              <skip>true</skip>
+            </configuration>
+          </plugin>
+        </plugins>
+      </build>
     </profile>
 
   </profiles>

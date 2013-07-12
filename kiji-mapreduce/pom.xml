@@ -128,23 +128,6 @@
         <groupId>org.codehaus.mojo</groupId>
         <artifactId>findbugs-maven-plugin</artifactId>
       </plugin>
-      <plugin>
-          <groupId>org.codehaus.mojo</groupId>
-          <artifactId>aspectj-maven-plugin</artifactId>
-          <version>${aspectj-maven-plugin.version}</version>
-          <executions>
-              <execution>
-                  <goals>
-                      <goal>compile</goal>
-                      <goal>test-compile</goal>
-                  </goals>
-                  <configuration>
-                      <source>${maven.compiler.source}</source>
-                      <target>${maven.compiler.target}</target>
-                  </configuration>
-              </execution>
-          </executions>
-      </plugin>
     </plugins>
   </build>
 
@@ -158,12 +141,6 @@
       <artifactId>kiji-mapreduce-platform-api</artifactId>
       <version>${project.version}</version>
       <scope>compile</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.kiji.schema</groupId>
-      <artifactId>kiji-schema</artifactId>
-      <version>${kiji-schema.version}</version>
-      <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>org.kiji.schema</groupId>
@@ -340,6 +317,24 @@
     </profile>
 
     <profile>
+      <id>default-schema</id>
+      <activation>
+        <activeByDefault>true</activeByDefault>
+        <property>
+          <name>!profiling</name>
+        </property>
+      </activation>
+      <dependencies>
+        <dependency>
+          <groupId>org.kiji.schema</groupId>
+          <artifactId>kiji-schema</artifactId>
+          <version>${kiji-schema.version}</version>
+          <scope>provided</scope>
+        </dependency>
+      </dependencies>
+    </profile>
+
+    <profile>
       <!--
       This profile compiles kiji-schema with profiling support compiled in.
       -->
@@ -429,7 +424,6 @@
         </plugins>
       </build>
     </profile>
-
   </profiles>
 
 </project>
